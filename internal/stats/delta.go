@@ -1,42 +1,59 @@
 package stats
 
-// Delta represents the change in statistics between two snapshots.
+// Delta represents the change between two snapshots for a single bucket.
 type Delta struct {
-	Name       string
-	KeyDelta   int
-	SizeDelta  int64
+	Bucket   string
+	KeysDiff int
+	SizeDiff int64
 }
 
-// ComputeDeltas compares two slices of BucketStats and returns per-bucket
-// deltas. Buckets present only in 'after' show their full values as growth;
-// buckets removed from 'after' are omitted.
-func ComputeDeltas(before, after []BucketStats) []Delta {
-	prev := make(map[string]BucketStats, len(before))
-	for _, b := range before {
-		prev[b.Name] = b
+// ComputeDeltas compares two snapshots and returns a slice of Deltas
+// for buckets that have changed between them.
+func ComputeDeltas(prev, curr *Snapshot) []Delta {
+	if prev == nil || curr == nil {
+		return nil
 	}
 
-	deltas := make([]Delta, 0, len(after))
-	for _, b := range after {
-		d := Delta{Name: b.Name}
-		if old, ok := prev[b.Name]; ok {
-			d.KeyDelta = b.KeyCount - old.KeyCount
-			d.SizeDelta = b.Size - old.Size
-		} else {
-			d.KeyDelta = b.KeyCount
-			d.SizeDelta = b.Size
+	var deltas []Delta
+
+	// Check buckets in current snapshot
+	for name, cs := range curr.Buckets {
+		ps, ok := prev.Buckets[name]
+		if !ok {
+			// New bucket
+			deltas = append(deltas, Delta{
+				Bucket:   name,
+				KeysDiff: cs.KeyN,
+				SizeDiff: int64(cs.LeafInuse),
+			})
+			continue
 		}
-		deltas = append(deltas, d)
+		keysDiff := cs.KeyN - ps.KeyN
+		sizeDiff := int64(cs.LeafInuse) - int64(ps.LeafInuse)
+		if keysDiff != 0 || sizeDiff != 0 {
+			deltas = append(deltas, Delta{
+				Bucket:   name,
+				KeysDiff: keysDiff,
+				SizeDiff: sizeDiff,
+			})
+		}
 	}
+
+	// Check for removed buckets
+	for name, ps := range prev.Buckets {
+		if _, ok := curr.Buckets[name]; !ok {
+			deltas = append(deltas, Delta{
+				Bucket:   name,
+				KeysDiff: -ps.KeyN,
+				SizeDiff: -int64(ps.LeafInuse),
+			})
+		}
+	}
+
 	return deltas
 }
 
-// HasChanges returns true if any delta contains a non-zero key or size change.
+// HasChanges returns true if any deltas are present.
 func HasChanges(deltas []Delta) bool {
-	for _, d := range deltas {
-		if d.KeyDelta != 0 || d.SizeDelta != 0 {
-			return true
-		}
-	}
-	return false
+	return len(deltas) > 0
 }
