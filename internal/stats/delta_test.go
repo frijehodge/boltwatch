@@ -78,6 +78,23 @@ func TestComputeDeltas_RemovedBucket(t *testing.T) {
 	}
 }
 
+func TestComputeDeltas_MultipleBuckets(t *testing.T) {
+	prev := makeSnapshot(map[string]bolt.BucketStats{
+		"alpha": {KeyN: 3, LeafInuse: 512},
+		"beta":  {KeyN: 5, LeafInuse: 1024},
+	})
+	curr := makeSnapshot(map[string]bolt.BucketStats{
+		"alpha": {KeyN: 6, LeafInuse: 512},
+		"beta":  {KeyN: 5, LeafInuse: 1024},
+		"gamma": {KeyN: 1, LeafInuse: 128},
+	})
+
+	deltas := ComputeDeltas(prev, curr)
+	if len(deltas) != 2 {
+		t.Fatalf("expected 2 deltas, got %d", len(deltas))
+	}
+}
+
 func TestHasChanges(t *testing.T) {
 	if HasChanges(nil) {
 		t.Error("expected false for nil deltas")
