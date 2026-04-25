@@ -1,49 +1,66 @@
 package stats
 
-import "time"
+import (
+	"time"
+)
 
-// Snapshot represents a point-in-time capture of bucket statistics.
+// Snapshot holds a point-in-time view of all bucket statistics.
 type Snapshot struct {
-	Timestamp time.Time
-	Buckets   []BucketStats
+	timestamp time.Time
+	buckets   map[string]BucketStats
 }
 
-// NewSnapshot creates a new Snapshot with the current time and provided buckets.
-func NewSnapshot(buckets []BucketStats) Snapshot {
-	return Snapshot{
-		Timestamp: time.Now(),
-		Buckets:   buckets,
+// NewSnapshot creates a new Snapshot from the given bucket stats and timestamp.
+func NewSnapshot(buckets map[string]BucketStats, ts time.Time) *Snapshot {
+	copy := make(map[string]BucketStats, len(buckets))
+	for k, v := range buckets {
+		copy[k] = v
+	}
+	return &Snapshot{
+		timestamp: ts,
+		buckets:   copy,
 	}
 }
 
-// IsEmpty returns true if the snapshot contains no bucket data.
-func (s Snapshot) IsEmpty() bool {
-	return len(s.Buckets) == 0
+// Timestamp returns when this snapshot was taken.
+func (s *Snapshot) Timestamp() time.Time {
+	return s.timestamp
 }
 
-// TotalKeys returns the total number of keys across all buckets in the snapshot.
-func (s Snapshot) TotalKeys() int {
+// Buckets returns a copy of the bucket stats map.
+func (s *Snapshot) Buckets() map[string]BucketStats {
+	copy := make(map[string]BucketStats, len(s.buckets))
+	for k, v := range s.buckets {
+		copy[k] = v
+	}
+	return copy
+}
+
+// IsEmpty returns true if the snapshot contains no buckets.
+func (s *Snapshot) IsEmpty() bool {
+	return len(s.buckets) == 0
+}
+
+// TotalKeys returns the sum of all keys across all buckets.
+func (s *Snapshot) TotalKeys() int {
 	total := 0
-	for _, b := range s.Buckets {
-		total += TotalKeys(b)
+	for _, b := range s.buckets {
+		total += b.KeyCount
 	}
 	return total
 }
 
-// TotalSize returns the total size in bytes across all buckets in the snapshot.
-func (s Snapshot) TotalSize() int64 {
+// TotalSize returns the sum of all size bytes across all buckets.
+func (s *Snapshot) TotalSize() int64 {
 	var total int64
-	for _, b := range s.Buckets {
-		total += TotalSize(b)
+	for _, b := range s.buckets {
+		total += b.SizeBytes
 	}
 	return total
 }
 
-// BucketNames returns a slice of all bucket names in the snapshot.
-func (s Snapshot) BucketNames() []string {
-	names := make([]string, 0, len(s.Buckets))
-	for _, b := range s.Buckets {
-		names = append(names, b.Name)
-	}
-	return names
+// Get returns the BucketStats for a named bucket and whether it exists.
+func (s *Snapshot) Get(name string) (BucketStats, bool) {
+	bs, ok := s.buckets[name]
+	return bs, ok
 }
